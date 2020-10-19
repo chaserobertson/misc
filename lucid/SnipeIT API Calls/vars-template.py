@@ -2,7 +2,7 @@ from datetime import datetime
 
 timestamp = datetime.now().strftime("%y-%m-%d_%H-%M-%S")
 
-server = "https://snipeit.lucidutil.com"
+server = "https://demo.snipeit.com"
 
 api_key = ""
 
