@@ -28,7 +28,7 @@ headers = {
 }
 
 # the server address to send the api request to
-server = 'https://lucidsoftware.zendesk.com'
+server = 'https://demo.zendesk.com'
 
 # ----------API ENDPOINTS------------ #
 users_endpoint = "/api/v2/users.json"
