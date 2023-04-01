@@ -1,2 +1,3 @@
-# portfolio
-All code herein was personally written by me, myself, or I.
+# Miscellaneous
+
+Old random things that I'd prefer to have GH keep around for me.
