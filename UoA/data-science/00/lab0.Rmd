@@ -1,0 +1,78 @@
+---
+title: "STATS 769 Lab 00"
+author: "Chase Robertson"
+date: '2022-07-20'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+cars <- read.csv("car-imports.csv")
+head(cars)
+```
+
+```{r}
+cars2 <- cars
+cars2$vfd <- as.numeric(gsub(",", "", cars$vfd))
+cars2$cif <- as.numeric(gsub(",", "", cars$cif))
+cars2$Imports.Qty <- as.numeric(cars$Imports.Qty)
+cars2$Month <- as.Date(paste0(cars$Month, "01"), format="%Y%m%d")
+str(cars2)
+```
+
+```{r fig.height=8}
+tab <- table(cars2$Country)
+par(mar=c(2,12,1,1))
+barplot(tab[order(tab)], horiz=T, las=1)
+```
+
+```{r fig.height=8}
+tab <- tapply(cars2$vfd, cars2$Country, sum)
+par(mar=c(2,12,1,1))
+barplot(tab[order(tab)], horiz=T, las=1)
+```
+
+Propose log transformation of vfd totals to linearise bar lengths.
+
+```{r}
+# narrow scope to Germany, scale vfd to millions NZD, sort by Month
+germany <- cars2[cars2$Country == 'Germany',]
+germany$vfd <- germany$vfd / 1000000
+germany <- germany[order(germany$Month),]
+
+# reserve final 10% for testing
+n <- nrow(germany)
+pivot <- n - (n %/% 10)
+train <- germany[1:pivot,]
+test <- germany[-(1:pivot),]
+
+mean_model <- mean(train$vfd)
+linear_model <- lm(vfd ~ Month, data=train)
+mean_pred <- rep(mean_model, 6)
+fit_pred <- predict(linear_model, test)
+
+rmse <- function(actual, predicted) {
+    sqrt(mean((actual - predicted) ^ 2))
+}
+
+cat("RMSE for mean:", fill=T)
+rmse(test$vfd, mean_pred)
+cat("RMSE for linear model:", fill=T)
+rmse(test$vfd, fit_pred)
+```
+
+```{r}
+plot(vfd ~ Month, data=germany, type='l', 
+     xlab='Year', ylab='Value for Duty (millions NZD))')
+abline(h=mean_model, col='blue')
+abline(linear_model, col='red')
+```
+
+I think the model should use the Import.Qty as predictor for a better fit with the same complexity.
+
+# Summary
+
+

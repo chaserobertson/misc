@@ -1,0 +1,83 @@
+---
+title: "STATS 782 Assignment 3; University of Auckland, Semester 1"
+date: 'Due Date: 23:59 NZ Time, Thursday 19 May 2022'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+### "Chase Robertson", "crob873"
+
+I have read the declaration on the cover sheet and confirm my agreement with it.
+
+[NOTE: figure sizes in this template are based on the model solution, but you can choose to change them if you use a different approach (except for 2e where you have to re-create it). However, you should make sure they are suitable for the plot you are drawing and thus are part of the solution.]: # (For your eyes only, destory this message after reading)
+
+## Question 1
+
+### a)
+
+```{r fig.width=7, fig.height=4}
+  
+```
+
+### b)
+
+```{r}
+    
+```
+
+```{r fig.width=7, fig.height=4}
+# f(20, 0.05, TRUE)
+# f(10, 0.03, FALSE)
+```
+
+
+### c)
+
+```{r}
+     
+```
+
+
+
+## Question 2
+
+### a)
+
+```{r}
+
+```
+
+### b)
+
+```{r fig.width=8, fig.height=6}
+    
+```
+
+Discuss..
+
+
+### c)
+
+
+```{r fig.width=7, fig.height=4}
+    
+```
+
+
+### d)
+
+```{r fig.width=9, fig.height=5.6}
+   
+```
+
+
+### e)
+
+```{r fig.width=8, fig.height=12}
+
+```
+
+### f)
+
+Answer here.

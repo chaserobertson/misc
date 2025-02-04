@@ -1,0 +1,208 @@
+---
+title: "Stats 769 Lab 8"
+author: "Chase Robertson"
+date: "2022-10-04"
+output: html_document
+---
+
+```{r}
+library(tree)
+library(randomForest)
+library(gbm)
+library(parallel)
+library(mclust)
+```
+
+
+# Introduction
+1. In your own words, describe briefly the data and the data mining problems that are studied in this lab.
+
+- In this lab, 16x16 grayscale images of handwritten digits are used to classify into their appropriate number. Classification of this dataset is known to be difficult, with a 2.5% error rate being considered excellent performance. Various tree-based ensemble methods are attempted, along with k-means and hierarchical clustering.
+
+# Pruned tree
+2. Grow an unpruned tree that fits the training data perfectly.
+
+Prune the tree using 10-fold cross-validation with 20 repetitions (in aid of parallel computing using 20 cores) for the purpose of minimising the misclassification rate. What are the training and test errors of the resulting pruned tree?
+
+```{r}
+set.seed(1234)
+
+train = read.csv("ziptrain.csv")
+train$digit = factor(train$digit)
+test = read.csv("ziptest.csv")
+test$digit = factor(test$digit)
+
+r = tree(digit ~ ., data=train, minsize=2, mindev=0)
+
+pr2 = prune.tree(r, method="misclass")
+
+m = length(pr2$size)
+err1 = err2 = double(m)
+for(i in 1:m) {
+  yy = prune.tree(r, best=pr2$size[i])
+  if(i == m) class(yy) = "tree"
+  s = summary(yy)$misclass
+  err1[i] = s[1] / s[2]
+  err2[i] = mean(predict(yy, test, type="class") != test$digit)
+}
+
+R = 20
+mcr = rowMeans(simplify2array(mclapply(1:R, function(...) cv.tree(r, method="misclass")$dev, mc.cores=20)))
+
+index = max(which(mcr == min(mcr)))
+(size = pr2$size[index])
+err1[index]
+err2[index]
+```
+
+
+3. Since we are going to compute the training and test errors frequently below, write a simple R function named errors() that computes both the training and test errors and can be re-used for any family of classification models, as long as there is a function to supply the predicted class labels.
+
+```{r}
+errors <- function(fit, fhat.tree, train, test, ...) {
+    trainErr <- mean(fhat.tree(fit, train, ...) != train$digit)
+    testErr <- mean(fhat.tree(fit, test, ...) != test$digit)
+    c(trainErr=trainErr, testErr=testErr)
+}
+
+best <- prune.tree(r, best=pr2$size[index])
+errors(best, predict, train, test, type="class")
+```
+
+# Bagging
+4. Produce a Bagging model for the training data with 500 trees (with nodesize=1) constructed.
+
+```{r}
+(bag <- randomForest(digit ~ ., train, ntree=500,  mtry=ncol(train)-1, nodesize=1, importance=TRUE))
+```
+
+What are the three most important variables, in terms of decreasing the Gini index, according to Bagging?
+
+```{r}
+gini <- rev(sort(bag$importance[,12]))
+head(gini, 3)
+```
+
+Compute both the training and test errors of this Bagging predictor.
+
+```{r}
+errors(bag, predict, train, test, type="class")
+```
+
+Is your test error similar to the OOB estimate? Do you think Bagging helps prediction here when compared with the pruned tree in Task 3?
+
+- My test error is on the same order of magnitude as the OOB estimate, but not as close as I had expected. The OOB error is certainly a better estimate than training error, though.
+- It seems that bagging has a huge impact on prediction compared to a single pruned tree, as evidenced by the drop in test error.
+
+# Random Forests
+5. Produce a Random Forest model with 500 trees (with `nodesize=1`) constructed.
+
+```{r}
+(rf <- randomForest(digit ~ ., train, ntrees=500, nodesize=1, importance=TRUE))
+```
+
+What are the three most important variables, in terms of accuracy, according to Random Forest?
+
+```{r}
+acc <- rev(sort(rf$importance[,11]))
+head(acc, 3)
+```
+
+Compute both the training and test errors of this Random Forest predictor.
+
+```{r}
+errors(rf, predict, train, test, type="class")
+```
+
+Is your test error similar to the OOB estimate? Do you think the tweak used by Random Forest helps prediction here when compared with the Bagging predictor in Task 4?
+
+- My test error is roughly double the OOB estimate, though still quite close as both are very small.
+- The random selection of predictor variables for each tree does seem to have a significant positive impact on prediction compared to bagging.
+
+6. Further consider using `nodesize=5,10,20`, respectively, when building a Random Forest model with 500 trees constructed.
+
+Compute both the training and test errors of these Random Forest predictors. Do the training and test errors differ much for a different value of `nodesize`?
+
+```{r}
+for (ns in c(5, 10, 20)) {
+    rf <- randomForest(digit ~ ., train, ntrees=500, nodesize=ns)
+    print(c(nodesize=ns, errors(rf, predict, train, test, type="class")))
+}
+```
+
+- The effect of increasing the node size is to increase both training and test errors, though not by much. A node size between 5 and 10 seems an optimal choice, as this results in a simpler model while maintaining a very low test error.
+
+# Boosting
+7. Produce a Boosting model, with 500 trees constructed.
+
+```{r}
+(boost <- gbm(digit ~ ., data=train, n.trees=500))
+```
+
+What are the three most important variables, according to Boosting?
+
+```{r}
+head(summary(boost, plotit=FALSE), 3)
+```
+
+Compute both the training and test errors of this Boosting predictor.
+
+```{r}
+boost.predict <- function(fit, data, ...) {
+    p <- predict(fit, data, ...)
+    # choose digit with max probability
+    colnames(p)[apply(p, 1, which.max)]
+}
+
+errors(boost, boost.predict, train, test, type="response")
+```
+
+In terms of performance, how does this Boosting predictor compare with the other predictors obtained in Tasks 2, 4, 5 and 6?
+
+- The boosting predictor is much better than the pruned decision tree, and on par with the bagging predictor. It is not as accurate as any of the random forest models.
+
+# Clustering
+8. Without using the `digit` variable, run the K-means algorithm to partition the training data into K = 2,…,5 clusters, respectively.
+
+Compute the adjusted Rand indices for these clustering results, when compared with the levels of the `digit` variable. Does this unsupervised learning method do a good job for the supervised data set here, in particular when K = 2?
+
+```{r}
+ctrain <- subset(train, select=-digit)
+
+ari <- numeric(4)
+names(ari) <- 2:5
+for (k in 2:5) {
+    km <- kmeans(ctrain, centers=k)
+    ari[k-1] <- adjustedRandIndex(train$digit, km$cluster)
+}
+ari
+```
+
+- This clustering method does not do very well on this supervised dataset, especially with low K. This fits with expectations, as there should be 10 correct clusters, one for each digit. It is not surprising that the Adjusted Rand Index is close to 0 with K=2, as any cluster of several digits is about as similar as a random cluster.
+
+9. Redo Task 8, using instead each of the four linkage methods: “complete”, “single”, “average” and “centroid”.
+
+```{r}
+d <- dist(ctrain)
+```
+
+```{r}
+options(scipen=999)
+
+h_ari <- matrix(nrow=4, ncol=4)
+colnames(h_ari) <- 2:5
+rownames(h_ari) <- c("complete", "single", "average", "centroid")
+
+for (i in 1:4) {
+    hier <- hclust(d, method=rownames(h_ari)[i])
+    for (k in 2:5) {
+        h_ari[i, k-1] <- adjustedRandIndex(train$digit, cutree(hier, k=k))
+    }
+}
+h_ari
+```
+
+Summary
+10. Write a summary of the entire report.
+
+- In this report, 16x16 grayscale images of handwritten digits were used to classify or cluster into their appropriate number. Various tree-based ensemble methods were attempted, along with k-means and hierarchical clustering. Random Forest was found to perform best, followed by Boosting, Bagging, then a single pruned decision tree. This ranking is to be expected, with the random subsample of features utilised in each Random Forest tree providing a key improvement in performance. The clustering methods were not able to group digits together well, with the best result being complete linkage of 4-5 clusters.

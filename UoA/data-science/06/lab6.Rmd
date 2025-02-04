@@ -1,0 +1,252 @@
+---
+title: "Stats 769 Lab 6"
+author: "Chase Robertson"
+date: "2022-09-20"
+output: html_document
+---
+
+# The Data Set
+
+
+```{r}
+library(MASS)
+library(e1071)
+library(class)
+library(parallel)
+
+set.seed(123)
+
+bank = read.csv("bank-subset.csv", strings=TRUE)
+X = model.matrix(y ~ ., data=bank)[,-1]        # design matrix, without intercept
+i = 1:1000
+train = data.frame(X[i,], y=bank$y[i])         # training set
+test = data.frame(X[-i,], y=bank$y[-i])        # test set
+
+summary(bank)
+```
+
+
+# Introduction
+1. In your own words, describe briefly the data and the practical problem that is associated with the data.
+
+The data is quite imbalanced, as only 10% of the outcomes in the variable y are positive. There are also many missing values, as is especially clear in the contact and poutcome variables. These missing values are treated as separate classes in the input, which may yield suboptimal results as compared with imputed values.
+
+# Basic Classification Methods
+2. Use the linear discrimant analysis to predict the class labels. Produce the confusion matrix and compute the misclassification rate, for both the training and test sets.
+
+```{r}
+confusion_and_rate <- function(true, predicted, display=T) {
+    if (display) print(table(true, predicted))
+    if (display) cat("Misclassification rate:", mean(true != predicted), fill=T)
+    else mean(true != predicted)
+}
+
+lda_fit <- lda(y ~ ., train)
+lda_train_pred <- predict(lda_fit, train)
+confusion_and_rate(train$y, lda_train_pred$class)
+```
+
+```{r}
+lda_test_pred <- predict(lda_fit, test)
+confusion_and_rate(test$y, lda_test_pred$class)
+```
+
+Test prediction is marginally less accurate than training set prediction, which meets expectations for a model that is well fit. However, there are more false negatives than false positives or true positives, which may not be ideal depending on the purpose of the model.
+
+3. Use the Naive Bayes method to predict the class labels. Produce the confusion matrix and compute the misclassification rate, for both the training and test sets.
+
+```{r}
+nb <- naiveBayes(y ~ ., train)
+nb_train_pred <- predict(nb, train)
+confusion_and_rate(train$y, nb_train_pred)
+```
+
+```{r}
+nb_test_pred <- predict(nb, test)
+confusion_and_rate(test$y, nb_test_pred)
+```
+
+Again, test accuracy is marginally higher as expected. However, Naive Bayes tends to predict positively much more often. This results in more true positives, less false negatives, and far more false positives.
+
+4. Use the K-nearest-neighbour (KNN) method to predict the class labels, with K=1,5, respectively. Produce the confusion matrix and compute the misclassification rates, for both the training and test sets.
+
+```{r}
+for (k in c(1, 5)) {
+    cat(paste("k =", k), "Train", fill=T)
+    knn_train_pred <- knn(train[,-43], train[,-43], cl=train$y, k=k)
+    confusion_and_rate(train$y, knn_train_pred)
+    cat(paste("k =", k), "Test", fill=T)
+    knn_test_pred <- knn(train[,-43], test[,-43], cl=train$y, k=k)
+    confusion_and_rate(test$y, knn_test_pred)
+}
+```
+
+With K=1, the label of the nearest neighbor is assigned as prediction, so training accuracy is naturally perfect. On the test set there are plenty of positive predictions, mostly false, and plenty of false negatives due to noise. While increasing K to 5 causes more neighbors' labels to be included in prediction, and better overall accuracy, there are fewer positive predictions due to the imbalance of the class distribution.
+
+5. Use the K-nearest-neighbour (KNN) method to predict the class labels, with K=1,2,...,30 respectively. Compute the misclassification rates, for both the training and test sets. Show the two curves for the misclassification rate versus K in one graph.
+
+```{r}
+K = 30
+train_rates = 1:K
+test_rates = 1:K
+for (k in 1:K) {
+    knn_train_pred <- knn(train[,-43], train[,-43], cl=train$y, k=k)
+    train_rates[k] = confusion_and_rate(train$y, knn_train_pred, display=F)
+    knn_test_pred <- knn(train[,-43], test[,-43], cl=train$y, k=k)
+    test_rates[k] = confusion_and_rate(test$y, knn_test_pred, display=F)
+}
+```
+
+```{r}
+rates <- data.frame(train=train_rates, test=test_rates)
+matplot(rates, type="l", xlab="K", ylab="Misclassification Rate")
+legend("bottomright", names(rates), col=1:2, lty=1:2)
+```
+
+With low K, training error is very low because the nearest neighbor is always the correct prediction. This is not the case in the test set, so error is high because of noise. As K increases, the decision boundary becomes softer and more general, so training and test error equalise. They seem to meet at K=7.
+
+# Data resampling
+
+In the following, let us consider how to use data resampling methods to find an appropriate value for a tuning parameter, here the value of K in the KNN classificaiton method.
+
+## Cross-validation
+
+6. Use 10-fold cross-validation, with 20 repetitions, to find an appropriate value for K in KNN from the training data only. Explain why you have used the technique of same subsamples.
+
+```{r}
+R <- 20
+CV <- 10
+errors <- matrix(nrow=R*CV, ncol=K)
+for (r in 1:R) {
+    # shuffle training set in each repetition
+    j <- sample(1:nrow(train))
+    for (i in 1:CV) {
+        # choose 1/10th of training set for validation
+        trn <- train[j %% CV != i-1, ]
+        vld <- train[j %% CV == i-1, ]
+        
+        for (k in 1:K) {
+            # fit a model with every possible K on this subsample
+            pred <- knn(trn[,-43], vld[, -43], cl=trn[, 43], k=k)
+            errors[CV*(r-1)+i, k] = mean(vld[,43] != pred)
+        }
+    }
+}
+```
+
+```{r}
+cv_knn <- colMeans(errors)
+plot(1:K, cv_knn, type="o", xlab="K", ylab="error")
+which.min(cv_knn)
+```
+
+The same subsamples technique reduced the variance of resulting Prediction Error estimates, since the random variation between validation sets was shared among each k-nn method. Sharing subsamples likely also reduced the computation time, since fewer random subsamples were necessary.
+
+## Jackknifing and Parallel Computing
+
+7. Use the Jackknifing technique (with a 90% for training and 10% for testing) to find an appropriate value for K in KNN from the training data only. Use R = 200 as the number of repetitions.
+
+```{r}
+R <- 200
+errors <- matrix(nrow=R, ncol=K)
+for (r in 1:R) {
+    ind <- sample(1:nrow(train))
+    trn <- train[ind %% 10 != 0, ]
+    vld <- train[ind %% 10 == 0, ]
+    for (k in 1:K) {
+        pred <- knn(trn[,-43], vld[, -43], cl=trn[, 43], k=k)
+        errors[r, k] = mean(vld[,43] != pred)
+    }
+}
+```
+
+```{r}
+jk_knn <- colMeans(errors)
+plot(jk_knn, xlab='K', ylab='error', type="o")
+which.min(jk_knn)
+```
+
+The main difference between this jackknife method and repeated cross-validation is the total independence of each train/test split. CV splits the set into folds and repeats the training with each block reserved for validation, whereas here each training set is independently sampled from the whole training set.
+
+8. Rewrite/reorganise your code so that each repetition can be carried out independently. Perform the Jackknifing selection of the K-value from the training set using parallel computing, with function mclapply().
+
+```{r}
+# option to parallelise by K or by repetitions
+# choose to parallelise repetitions to reduce variance of means and enable ncores > nK
+# parallelisation argument is random seed to ensure independence of results
+jackknife <- function(data, proportion=0.1, K=30, R=10, seed=123) {
+    set.seed(seed)
+    pe <- matrix(nrow=R, ncol=K)
+    colnames(pe) <- 1:K
+    for (r in 1:R) {
+        ind <- sample(1:nrow(data))
+        vld_ind <- ind[1:nrow(data)*proportion]
+        trn <- data[ind[-vld_ind], ]
+        vld <- data[ind[vld_ind], ]
+        for (k in 1:K) {
+            pred <- knn(trn[,-43], vld[,-43], cl=trn[,43], k=k)
+            pe[r, k] = mean(vld[,43] != pred)
+        }
+    }
+    colMeans(pe)
+}
+
+l <- mclapply(X=list(seed=(1:K)*K), FUN=jackknife, data=train, proportion=0.1, K=K, R=R)
+kerr <- colMeans(matrix(unlist(l), ncol=K))
+plot(kerr, xlab='K', ylab='Error', type='o')
+```
+
+I chose to parallelise the repetitions of jackknife, so the same-subsamples technique can still be used. This requires that a different random seed be passed to each individual job to correctly generate independent results.
+
+Compare the timings, when 1, 5, 10 or 20 cores are used (so you have to do this on a VM).
+
+```{r}
+total_reps <- R
+cores <- c(1, 5, 10, 20)
+for (c in cores) {
+    seed <- 123 * c^2
+    reps_per_core <- total_reps / c
+    time <- system.time(
+        colMeans(matrix(unlist(mclapply(
+            list(seed=seed), FUN=jackknife, data=train, proportion=0.1, 
+            K=K, R=reps_per_core, mc.cores=c)), ncol=K))
+        )
+    cat("With", c, "core(s):", fill=T)
+    print(time)
+}
+```
+
+Because each repetition is meant to be independent, the process is "embarassingly parallel". A simple map-reduce technique is used to run repetitions on each core, then reduce the results with the main job. This results in linear speedup where doubling the number of cores reduces computation time by half.
+
+9. For results to be reproducible, it is better to use random seeds. Investigate and demonstrate how this can be achieved when mclapply() is used.
+
+```{r}
+# each parallel job should be fed a distinct, but deterministic seed
+# my jackknife function already handles this
+
+# only addition is to select seeds and pass to each job
+seeds <- seq(123, by=769, length.out=max(cores))
+for (i in seq_along(cores)) {
+    c = cores[i]
+    c_seeds = seeds[1:c]
+    reps_per_core <- total_reps / c
+    time <- system.time(
+        colMeans(matrix(unlist(mclapply(
+            list(seed=c_seeds), FUN=jackknife, data=train, proportion=0.1, 
+            K=K, R=reps_per_core, mc.cores=c)), ncol=K))
+        )
+    cat("With", c, "core(s):", fill=T)
+    print(time)
+    cat("Seed(s) utilised by each core:", c_seeds, fill=T)
+}
+```
+
+As mentioned previously, all that is needed to guarantee independence of repetitions across cores is to feed different random seeds to each parallel job. I have experimented with a few methods of doing so, and found that pre-generating seeds as a range of values most simple, though am not sure of the level of independence achieved with this method.
+
+# Summary
+
+In this report, imbalanced data is predicted using various classifiers, with varying levels of success. A special note is made of tradeoffs between true/false positive/negative rates under the classifier methods. Cross-validation and jackknife data resampling methods are also explored, with the computation time of parallelised versions compared to sequential methods. With independent repetitions of the process, parallelisation is quite simple to implement, with significant gains in clock-time computation.
+
+
+
+

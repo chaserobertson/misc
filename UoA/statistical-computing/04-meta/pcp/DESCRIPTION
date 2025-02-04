@@ -1,0 +1,11 @@
+Package: pcp
+Type: Package
+Title: Parallel Coordinate Plot
+Version: 1.0
+Date: 2022-06-02
+Author: Chase Robertson
+Maintainer: Chase Robertson <crob873@aucklanduni.ac.nz>
+Description: Plots any convertible list of variables 
+             as a series of lines between each observation's 
+             [0,1] normalised values. 
+License: GPL-2

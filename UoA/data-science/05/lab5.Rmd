@@ -1,0 +1,284 @@
+---
+title: "lab5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Set
+
+The data utilised in this report is of individual NYC taxi rides, and is stored in compressed monthly chunks on the remote VM used for processing and analysis. The 2010-01 file chosen for analysis includes 18 fields, with a few selected for import into R: pickup datetime, payment type, tip amount, and total payment amount.
+
+A Hadoop cluster is also used, with a database containing 2009 flight information, from which arrival delay information is gathered.
+
+# Tasks
+
+### 1. 
+
+Use chunk-wise processing to create a linear model of tip amounts given pre-tip ride cost.
+
+```{r eval=F}
+process_chunk <- function(chunk, skip_lines=0, test=F) {
+  df <- dstrsplit(chunk, 
+                list(NA,pickup_datetime="",NA,NA,NA,NA,NA,NA,NA,NA,NA,
+                     payment_type="",NA,NA,NA,tip_amount=1,NA, total_amount=1),
+                sep=",", strict=F, skip=skip_lines)
+  
+  # fix payment type and select credit transactions
+  df$payment_type <- toupper(df$payment_type)
+  df <- subset(df, payment_type == "CRE")
+  
+  # calculate pre tip amount
+  df$pre_tip <- df$total_amount - df$tip_amount
+  
+  # separate train and test by day
+  if (test) subset(df, as.numeric(substr(df$pickup_datetime, 9, 10)) >= 28)
+  else subset(df, as.numeric(substr(df$pickup_datetime, 9, 10)) < 28)
+}
+```
+
+Having defined the steps for each data chunk, apply to the Jan 2010 file.
+
+```{r eval=F}
+library(iotools)
+library(biglm)
+
+f <- bzfile("/course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2", "rb")
+r <- chunk.reader(f)
+
+chunk = read.chunk(r)
+fit <- biglm(tip_amount ~ pre_tip, data = process_chunk(chunk, skip_lines=2))
+
+while(length(chunk <- read.chunk(r))) {
+  fit <- update(fit, process_chunk(chunk))
+  print(summary(fit))
+  gc()
+}
+```
+
+```
+Sample size =  4040287
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4370 0.4347 0.4393 0.0012 0
+pre_tip     0.1394 0.1393 0.1396 0.0001 0
+```
+
+The `biglm` model was able to fit quite closely with the in-memory Lab 3 result below. While the intercept coefficient is not exactly matched, it is within the 95% confidence interval.
+
+```
+Coefficients:
+   (Intercept)      pre_tip  
+        0.4349       0.1394
+```
+
+Running garbage collection to show model size in memory:
+
+```{r eval=F}
+gc()
+```
+
+```
+          used (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells  570504 30.5    1267837  67.8   873147  46.7
+Vcells 5261506 40.2   21061419 160.7 21056940 160.7
+```
+
+Compared with the Lab 3 in-memory model below, the `biglm` model occupies an order of magnitude less memory. This would be a crucial feature if the model needed to be fit on more than a few months of data, as that amount would not fit in memory at once. However, chunk-wise processing adds additional time overhead and programmatic complexity.
+
+```
+            used  (Mb) gc trigger   (Mb)  max used   (Mb)
+Ncells    287396  15.4     665674   35.6    424141   22.7
+Vcells 129454654 987.7  185244383 1413.4 150994989 1152.1
+```
+
+Compute RMSE of predictions for test set (last four days of January 2010).
+
+```{r eval=F}
+f <- bzfile("/course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2", "rb")
+r <- chunk.reader(f)
+
+chunk <- read.chunk(r)
+test <- process_chunk(chunk, skip_lines=2, test=T)
+SE <- (predict(fit, test) - test$tip_amount)^2
+
+while(length(chunk <- read.chunk(r))) {
+  test <- process_chunk(chunk, test=T)
+  SE <- c(SE, (predict(fit, test) - test$tip_amount)^2)
+  print(length(SE))
+  gc()
+}
+RMSE <- sqrt(mean(SE))
+RMSE
+```
+
+```
+[1] 1.404859
+```
+
+### 2. 
+
+Use SparkR to fit a linear model on a random 90% training set from 8 January ride data.
+
+```{sparkR eval=F}
+d <- read.df("/data/nyctaxi/yellow/2010/yellow_tripdata_2010-01.parquet")
+
+d <- subset(d, substr(d$pickup_datetime, 9, 10) == "08",
+            select=c("payment_type", "tip_amount", "total_amount"))
+d$payment_type <- upper(d$payment_type)
+d <- subset(d, d$payment_type == "CRE")
+d$pre_tip <- d$total_amount - d$tip_amount
+
+trainTest <-randomSplit(d, c(0.9,0.1), 123)
+train <- trainTest[[1]]
+test <- trainTest[[2]]
+
+fit <- spark.lm(train, tip_amount ~ pre_tip)
+summary(fit)
+```
+
+```
+$coefficients
+             Estimate
+(Intercept) 0.4411292
+pre_tip     0.1373720
+
+$numFeatures
+[1] 1
+```
+
+The model is quite close to that fit by chunk-wise processing, with the small difference in coefficients likely due to the subset of data used to train. The RMSE of the SparkR model is shown below, which for the same reason is slightly different from the previous results.
+
+```{sparkR eval=F}
+pred <- collect(predict(fit, test))
+RMSE <- sqrt(mean((pred$prediction - pred$tip_amount)^2))
+RMSE
+```
+ 
+```
+[1] 1.471827
+```
+
+### 3. 
+Query airports' mean arrival delay from the flights table of the airline database via Hive.
+
+```{bash eval=F}
+beeline -u jdbc:hive2://fosstatsprd01:10000
+```
+
+Destination airports with highest mean arrival delay:
+
+```{hive eval=F}
+use airline;
+select dest, 
+    avg(arrdelay) as mean_arr_delay, 
+    count(*) as n_flights 
+from flights 
+group by dest 
+order by mean_arr_delay DESC 
+limit 5;
+```
+```
++-------+---------------------+------------+
+| dest  |   mean_arr_delay    | n_flights  |
++-------+---------------------+------------+
+| PIH   | 59.0                | 1          |
+| PSE   | 30.533333333333335  | 60         |
+| RDD   | 24.54957507082153   | 357        |
+| SUN   | 23.5                | 80         |
+| ACV   | 22.814285714285713  | 358        |
++-------+---------------------+------------+
+```
+
+Origin airports with highest mean arrival delay:
+
+```{hive eval=F}
+use airline;
+select origin, 
+    avg(arrdelay) as mean_arr_delay, 
+    count(*) as n_flights 
+from flights 
+group by origin 
+order by mean_arr_delay DESC 
+limit 5;
+```
+
+```
++---------+---------------------+------------+
+| origin  |   mean_arr_delay    | n_flights  |
++---------+---------------------+------------+
+| PIR     | 73.0                | 1          |
+| PSE     | 33.1                | 61         |
+| ACV     | 24.472067039106147  | 362        |
+| EGE     | 22.04               | 167        |
+| YAP     | 20.958630527817405  | 709        |
++---------+---------------------+------------+
+```
+
+It is interesting to note the intersection between origin and destination airports with highest mean delay: PSE and ACV. Without having looked further into these airports, I wonder if they share any particular traits that contribute to chronic or cascading delays.
+
+### 4. 
+Use Map/Reduce to compute mean arrival delay for all pairs of origin/destination airports.
+
+```{r eval=F}
+library(iotools)
+library(hmapred)
+
+read_df <- function(r) {
+    d <- dstrsplit(r, list(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+                           arr_delay=1,NA,origin="",dest=""),
+                   sep=",", strict=FALSE)
+}
+
+map_df <- function(d) {
+    d <- d[!is.na(d$arr_delay),]
+    
+    # unidirectional pairs
+    # d$ports <- paste(d$origin, d$dest, sep="->")
+    
+    # bidirectional pairs
+    d$ports <- pmin(paste(d$origin, d$dest, sep="_"), 
+                    paste(d$dest, d$origin, sep="_"))
+    
+	a = aggregate(d$arr_delay, list(ports=d$ports),
+	              function(x) c(sum=sum(x), n=length(x)))
+	m = a$x
+	rownames(m) = a$ports
+	m
+}
+
+reduce_m = function(m) {
+    storage.mode(m) = "numeric"
+    t(sapply(split(m, rownames(m)), function(x) colSums(matrix(x,ncol=2))))
+}
+
+res <- hmr(hinput("/data/airline/csv", read_df), map=map_df, reduce=reduce_m)
+f <- open(res, "rb")
+r <- readAsRaw(f)
+close(f)
+
+m = mstrsplit(r, type="numeric", nsep="\t")
+## compute mean (sum / n)
+dmean = m[,1] / m[,2]
+## show top 5 pairs
+head(dmean[order(dmean, decreasing=T)], 5)
+```
+
+```
+GUC_HDN CMI_SPI DEN_SYR ELP_MFE JFK_MDW 
+    998     575     487     316     281 
+```
+
+Mean arrival delay of direction-agnostic pairs of airports, as shown above, varies slightly from directional pairs of airports, as shown below. In the case of VPS->DHN, there was one flight with a 506 minute delay, but one flight from DHN->VPS with no delay, hence the difference in ranking.
+
+```
+GUC->HDN CMI->SPI VPS->DHN SYR->DEN ELP->MFE
+     998      575      506      487      316
+```
+
+# Summary
+
+Having explored a few different methods with which to distribute computing, the trade-offs between methods become more clear. Hive works well for quick and simple data analysis tasks which SQL can handle. SparkR abstracts away the distributed nature of big data processing, but is different from R in a few frustrating ways. Chunk-wise processing and Map/Reduce seem suited to provide maximum flexibility, with chunk-wise more suited to necessarily serial processing, and both inevitably requiring a bit more effort from the programming perspective. All things considered, each has its strength and all are good to have some familiarity with, so I am glad to have gained some experience using them.
+
+

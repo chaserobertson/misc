@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style type="text/css">html{font-family:sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}body{margin:0}article,aside,details,figcaption,figure,footer,header,hgroup,main,menu,nav,section,summary{display:block}audio,canvas,progress,video{display:inline-block;vertical-align:baseline}audio:not([controls]){display:none;height:0}[hidden],template{display:none}a{background-color:transparent}a:active,a:hover{outline:0}abbr[title]{border-bottom:1px dotted}b,strong{font-weight:700}dfn{font-style:italic}h1{margin:.67em 0;font-size:2em}mark{color:#000;background:#ff0}small{font-size:80%}sub,sup{position:relative;font-size:75%;line-height:0;vertical-align:baseline}sup{top:-.5em}sub{bottom:-.25em}img{border:0}svg:not(:root){overflow:hidden}figure{margin:1em 40px}hr{height:0;-webkit-box-sizing:content-box;-moz-box-sizing:content-box;box-sizing:content-box}pre{overflow:auto}code,kbd,pre,samp{font-family:monospace,monospace;font-size:1em}button,input,optgroup,select,textarea{margin:0;font:inherit;color:inherit}button{overflow:visible}button,select{text-transform:none}button,html input[type=button],input[type=reset],input[type=submit]{-webkit-appearance:button;cursor:pointer}button[disabled],html input[disabled]{cursor:default}button::-moz-focus-inner,input::-moz-focus-inner{padding:0;border:0}input{line-height:normal}input[type=checkbox],input[type=radio]{-webkit-box-sizing:border-box;-moz-box-sizing:border-box;box-sizing:border-box;padding:0}input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{height:auto}input[type=search]{-webkit-box-sizing:content-box;-moz-box-sizing:content-box;box-sizing:content-box;-webkit-appearance:textfield}input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-search-decoration{-webkit-appearance:none}fieldset{padding:.35em .625em .75em;margin:0 2px;border:1px solid silver}legend{padding:0;border:0}textarea{overflow:auto}optgroup{font-weight:700}table{border-spacing:0;border-collapse:collapse}td,th{padding:0}@media print{*,:after,:before{color:#000!important;text-shadow:none!important;background:0 0!important;-webkit-box-shadow:none!important;box-shadow:none!important}a,a:visited{text-decoration:underline}a[href]:after{content:" (" attr(href) ")"}abbr[title]:after{content:" (" attr(title) ")"}a[href^="javascript:"]:after,a[href^="#"]:after{content:""}blockquote,pre{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}img,tr{page-break-inside:avoid}img{max-width:100%!important}h2,h3,p{orphans:3;widows:3}h2,h3{page-break-after:avoid}
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+
+
+
+<title>Lab-03</title>
+
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+
+
+<style type="text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+
+</head>
+
+<body>
+
+<div class="container-fluid main-container">
+
+
+
+
+
+
+
+<h1 id="stats-769-lab-03">STATS 769 Lab 03</h1>
+<p>The purpose of this lab is to understand the consequences and
+limitations of dealing with large data.</p>
+<p>For this lab you have to use one of the
+<code>fosstatsprd0[2-4]</code> VMs, because of the large datasets
+involved. Also you should use <code>{bash eval=FALSE}</code> chunks to
+show any long-running shell code since some it may take a long time to
+run (see below).</p>
+<h2 id="the-data-set">The Data Set</h2>
+<p>The New York City (NYC) Taxi &amp; Limousine Commission publishes
+data on all taxi trips in NYC: <a href="https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page" class="uri">https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page</a></p>
+<p>We will be using yellow taxi trip records which consist of pick-up
+and drop-off dates/times, pick-up and drop-off locations, trip
+distances, itemized fares, rate types, payment types, and
+driver-reported passenger counts. Our copy of the data lives in
+<code>/course/data/nyctaxi/csv</code> and consists of bzip2-compressed
+CSV files.</p>
+<p>This lab will require considerable processing times so check the load
+on the VM with <code>uptime</code> or <code>top</code> and consider
+switching VMs if one gets too busy.</p>
+<p>Do <strong>NOT</strong> copy the data files, you can refer to them
+using absolute paths. When you need to create large output files, use
+the <code>/course/users/&lt;UPI&gt;</code> directory, do
+<strong>NOT</strong> use your <code>UNI_HOME</code> for any data files
+(it is too slow and small for that). It is recommended to create a
+directory <code>/course/users/&lt;UPI&gt;/lab-3</code>, do all the work
+there in the shell and command-line R, then save your history and at the
+end write your report Rmd file from your notes. For timings and
+long-running shell parts (Q1 and 2) you can use <code>eval=FALSE</code>
+and paste the output obtained on the VM shell below the code in the same
+chunk. Once you are happy, you should create the html file from the Rmd
+on the VMs via <code>Rscript -e &#39;rmarkdown::render(&quot;Lab-03.Rmd&quot;)</code>
+or similar.</p>
+<h3 id="import">Import</h3>
+<ol type="1">
+<li><p>Use a shell command to determine how long it takes to decompress
+the <code>yellow_tripdata_2010-01.csv.bz2</code> data file and count how
+many lines it has.</p>
+<p>Estimate (assuming sequential processing) based on the obtained
+result how long it would take to decompress:</p>
+<ul>
+<li><p>all data for the year 2010</p></li>
+<li><p>all the available CSV files in the <code>csv</code>
+directory</p></li>
+</ul></li>
+<li><p>Use a shell command to count the number of lines in each
+compressed file for year 2010 all in parallel and measure the time. How
+does the time compare to your estimate from the previous question?
+Comment on the result.</p></li>
+<li><p>Use a shell command to extract the fields
+<code>payment_type</code>, <code>tip_amount</code> and
+<code>total_amount</code> from the
+<code>yellow_tripdata_2010-01.csv.bz2</code> file into the file
+<code>tips-2010-01.csv</code>.</p>
+<p>Tips are voluntary gratuity payments to the driver paid in additon to
+the fare and other surcharges. The variable <code>tip_amount</code> has
+the amount of USD paid as tip. The variable <code>total_amount</code>
+has the total amount (in USD) charged which includes fares, surcharges
+and the tip.</p>
+<p>Estimate the memory required (in Mb) to hold the newly created
+<code>tips-2010-01.csv</code> dataset in R and explain your reasoning.
+You can assume that the <code>payment_type</code> is a character vector
+with very few distinct values and both other fields are real
+(double-precision numeric) vectors. Would it fit into the memory of a
+computer with 2Gb of RAM?</p></li>
+<li><p>Read the <code>tips-2010-01.csv</code> file into R as a data
+frame named <code>tt</code>. Ideally, choose an efficient method of
+loading such as <code>iotools::read.csv.raw()</code>,
+<code>data.table::fread()</code> or <code>readr::read_csv()</code>.</p>
+<p>The result may look something like this (the object type may vary
+depending on the tools used):</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>   <span class="fu">str</span>(tt)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>   <span class="st">&#39;data.frame&#39;</span><span class="sc">:</span> <span class="dv">14863778</span> obs. of  <span class="dv">3</span> variables<span class="sc">:</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="er">$</span> payment_type<span class="sc">:</span> chr  <span class="st">&quot;CAS&quot;</span> <span class="st">&quot;CAS&quot;</span> <span class="st">&quot;CAS&quot;</span> <span class="st">&quot;CAS&quot;</span> ...</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="sc">$</span> tip_amount  <span class="sc">:</span> num  <span class="dv">0</span> <span class="dv">0</span> <span class="dv">0</span> <span class="dv">0</span> <span class="fl">0.87</span> <span class="dv">1</span> <span class="dv">0</span> <span class="dv">0</span> <span class="dv">0</span> <span class="dv">2</span> ...</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="sc">$</span> total_amount<span class="sc">:</span> num  <span class="dv">5</span> <span class="fl">16.3</span> <span class="fl">12.7</span> <span class="fl">14.3</span> <span class="fl">6.67</span> <span class="dv">12</span> <span class="fl">6.6</span> <span class="fl">7.4</span> <span class="fl">12.3</span> <span class="dv">12</span> ...</span></code></pre></div>
+<p>Compare the actual object size of <code>tt</code> - does it match
+your estimate from 3. ?</p></li>
+</ol>
+<h3 id="clean">Clean</h3>
+<ol start="5" type="1">
+<li>The <code>payment_method</code> is supposed to have four possible
+values corresponding to the following payment types: cash, credit-card,
+disputed and no-charge. Clean the variable such that it is
+consistent.</li>
+</ol>
+<h3 id="explore">Explore</h3>
+<ol start="6" type="1">
+<li><p>Check the sanity of the data (are inherent assumptions true,
+explore the distributions).</p></li>
+<li><p>Check the relationship between the presence of a tip (i.e.,
+<code>tip_amount</code> is not zero) and the payment type. Can you see
+some relationship?</p></li>
+</ol>
+<h3 id="model">Model</h3>
+<ol start="8" type="1">
+<li><p>We will focus on tips in credit card transactions, so the
+following is only using the subset with credit card as payment type. We
+want to model the tip amount based on the fare. We are assuming that the
+relationship does not depend on day/time so we only use the
+<code>tip_amount</code> and <code>total_amount</code> variables.</p>
+<p>However, the total amount already includes the tip, so in order for
+the model to make sense, we have to create a variable
+<code>pre_tip</code> which is the total without the tip and we want to
+use it to model the tip amount. Split the dataset randomly in training
+set and test set using 90%/10% proportions. Fit a linear model
+predicting the tip from the pre-tip amount and compute the RMSE for both
+the training and test sets. Comment on the result.</p>
+<p>Plot the test data (<code>pch=&#39;.&#39;</code> is strongly recommended) and
+the model predictions. Comment on the model result. Do you see some
+structure in the data? Can you explain it? Use R to support your
+hypotheses.</p></li>
+</ol>
+<h2 id="summary">Summary</h2>
+<ol start="9" type="1">
+<li>Write a summary of your findings.</li>
+</ol>
+<h1 id="the-report">The Report</h1>
+<p>Your submission should consist of an R Markdown document, submitted
+via Canvas. You should write your document so that it can be processed
+on a computer without any manual intervention. For example, do not
+include any calls to <code>setwd()</code> or <code>file.choose()</code>.
+You should write code that assumes that data files are at a fixed
+location in <code>/course/data/</code> on the VMs. Also submit a
+processed version of your R Markdown document (an HTML document) in case
+we cannot process your document on the VM.</p>
+<p>Your report should include:</p>
+<ul>
+<li>A brief description of the data.</li>
+<li>For each task, R code AND a brief text commentary.</li>
+<li>A summary of the entire report.</li>
+</ul>
+<h1 id="marking">Marking</h1>
+<p>Marks will be lost for:</p>
+<ul>
+<li>R Markdown file is missing.</li>
+<li>R Markdown file does not run.</li>
+<li>Processed file (HTML) is missing.</li>
+<li>Section of the report is missing.</li>
+<li>Unintelligible, or confusing, or irrelevant summary.</li>
+<li>Significantly poor R (or other) code.</li>
+<li>Overly verbose code, output, or commentary.</li>
+</ul>
+
+
+
+<!-- code folding -->
+
+
+
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://stat.auckland.ac.nz/~urbanek/mj/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</div>
+</body>
+</html>

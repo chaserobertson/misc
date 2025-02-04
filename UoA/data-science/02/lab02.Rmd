@@ -1,0 +1,184 @@
+---
+title: "lab02"
+author: "Chase Robertson"
+date: "2022-08-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+In this project we explore retrieving data from both web API's and raw webpage HTML. The OpenMeteo.com weather data API is used to gather high/low daily temperatures for locations within NZ, specified with latitude and longitude values.
+
+# Tasks
+
+## Import
+
+1. Use bash curl to download daily Auckland weather data between 1980 and 2022 from OpenMeteo to a file named `akl.json`.
+```{bash}
+if [ ! -f akl.json ]; then
+curl -o akl.json 'https://archive-api.open-meteo.com/v1/era5?latitude=-36.85&longitude=174.77&start_date=1980-01-01&end_date=2022-06-30&daily=temperature_2m_max,temperature_2m_min&timezone=Pacific%2FAuckland'
+fi
+```
+
+2. Read json data file into R.
+```{r}
+library(jsonlite)
+jd <- read_json("akl.json", simplifyVector = TRUE)
+str(jd)
+```
+
+## Clean
+
+3. Create simplified and correctly typed dataframe `d` from the imported dataframe.
+
+```{r}
+d <- data.frame(day = as.Date(jd$daily$time), 
+                min = jd$daily$temperature_2m_min, 
+                max = jd$daily$temperature_2m_max)
+str(d)
+```
+
+## Explore
+
+4. Verify that the data is complete (no NA's in summary) and variable distributions meet expectations.
+
+```{r}
+summary(d)
+```
+
+## Model
+
+5. Aggregate data to focus on yearly average temperatures over time.
+
+```{r}
+d$year <- as.integer(format(d$day, "%Y"))
+d$avg <- (d$min + d$max) / 2
+avg <- aggregate(avg ~ year, data=d, FUN=mean)
+str(avg)
+```
+
+Using 1980-2014 as a training set, we fit a simple mean and linear model, and predict the annual average temperatures for the remaining years.
+
+```{r}
+train <- subset(avg, year <= 2014)
+test <- subset(avg, year > 2014)
+
+mean_model <- mean(train$avg)
+linear_model <- lm(avg ~ year, data=train)
+
+mean_pred <- rep(mean_model, nrow(test))
+linear_pred <- predict(linear_model, test)
+
+rmse <- function(actual, predicted) {
+    sqrt(mean((actual - predicted) ^ 2))
+}
+
+cat("RMSE for mean:", rmse(test$avg, mean_pred), fill=T)
+cat("RMSE for linear model:", rmse(test$avg, linear_pred), fill=T)
+```
+
+```{r}
+plot(avg ~ year, data=avg, type='l', 
+     xlab='Year', ylab='Annual Avg Temperature')
+abline(h=mean_model, col='blue')
+abline(linear_model, col='red')
+abline(v=test$year[1], lty=2)
+```
+
+There is a suspiciously huge spike in temperature in the final year of data. My hypothesis: if the test data ends in June of 2022, the average annual temperature of 2022 does not include winter or spring temperatures! This would cause the annual average of 2022 to be significantly higher than other years. 
+
+```{r}
+summary(aggregate(min + max ~ year, data = d, FUN=length))
+```
+
+Indeed; there exists a year with only 181 days. Given that we haven't yet reached the end of 2022, it makes sense that 2022 data would not be complete and skewed toward the hot early months. Ways to handle this situation include dropping 2022 from the test set, changing the window of what defines an "annual" average e.g. June to June, or imputing the missing 2022 months' temperatures. I have chosen to drop 2022, though it would be interesting to compare other models using June to June aggregation.
+
+```{r include=FALSE, eval=FALSE}
+d$month <- as.integer(format(d$day, "%m"))
+avg2 <- avg
+avg2[avg2$year==2022,]$avg <- mean(c(mean(subset(d, year == 2022)$avg), mean(subset(d, year > 2014 & month > 6)$avg)))
+test2 <- subset(avg2, year > 2014)
+tail(test2, 4)
+```
+
+```{r}
+avg2 <- subset(avg, year < 2022)
+train2 <- subset(avg2, year <= 2014)
+test2 <- subset(avg2, year > 2014)
+
+summary(avg2)
+```
+
+
+```{r}
+mean_model <- mean(train$avg)
+linear_model <- lm(avg ~ year, data=train)
+
+mean_pred <- rep(mean_model, nrow(test2))
+linear_pred <- predict(linear_model, test2)
+
+
+cat("RMSE for mean:", rmse(test2$avg, mean_pred), fill=T)
+cat("RMSE for linear model:", rmse(test2$avg, linear_pred), fill=T)
+```
+
+```{r}
+plot(avg ~ year, data=avg2, type='l', 
+     xlab='Year', ylab='Annual Avg Temperature')
+abline(h=mean_model, col='blue')
+abline(linear_model, col='red')
+abline(v=test2$year[1], lty=2)
+```
+
+The linear model predicts annual average temperatures much better with the corrected test values, both in absolute terms and relative to the mean model. The total RMSE and difference in RMSE between models are greatly improved by addressing the data issue. The corrected linear model seems most suitable in the plot as well, though the coming few years may continue to demonstrate a steeper slope of increase than in years prior.
+
+## Revisit
+
+6. With the goal of extending analysis to other cities in NZ, we scrape cities' locations from a table hosted by UoA.
+
+```{r}
+library(xml2)
+xmlpage <- read_html(url("https://stat.auckland.ac.nz/~su/769/demo/nzcities.html"))
+table <- xml_find_first(xmlpage, "//table")
+fieldnames <- xml_text(xml_find_all(table, ".//th"))
+fields <- xml_text(xml_find_all(table, ".//td"))
+fieldmat <- matrix(fields, byrow=TRUE, ncol=length(fieldnames))
+cities <- as.data.frame(fieldmat)
+names(cities) <- fieldnames
+cities$lat <- as.numeric(cities$lat)
+cities$lng <- as.numeric(cities$lng)
+cities$population <- as.integer(cities$population)
+cities$population_proper <- as.integer(cities$population_proper)
+str(cities)
+```
+
+Scope is limited to the maximum daily temperature through 2021 for the 5 most populous cities in NZ.
+
+```{r}
+most_populous <- head(cities[rev(order(cities$population)),], 5)
+fetch_city <- function(city) {
+    df <- fromJSON(url(paste0('https://archive-api.open-meteo.com/v1/era5?latitude=', city["lat"], 
+                         '&longitude=', city["lng"], 
+                         '&start_date=', '2021-01-01', 
+                         '&end_date=', '2021-12-31', 
+                         '&daily=temperature_2m_max&timezone=Pacific%2FAuckland')))
+    df$daily$temperature_2m_max
+}
+max.temperature = apply(most_populous, 1, FUN=fetch_city)
+```
+
+```{r}
+matplot(max.temperature, type='l', lty=1, xaxt="n", xlab="Day")
+legend("bottomleft", legend=unique(most_populous$city), col = 1:5, lty=1)
+axis(1, at=seq(1, 365, by=60), labels=c("Jan", "Mar", "May", "Jul", "Sep", "Nov", "Jan"))
+```
+
+The plot is a bit crowded with 5 cities simultaneously, but does provide some insight into daily max temperatures. The cities within the Auckland region are closely matched due to their proximity to each other, and follow a smoother trend than the other cities. Christchurch and Wellington seem to have more variability in temperature, with Christchurch hitting both the universal max and min values of all included cities.
+
+# Summary
+This project was an interesting study into temperature trends in NZ. As in other recent projects, both the most time-consuming and interesting challenges came in data retrieval and manipulation. Utilising both json data from API calls, and HTML tables from simple web pages, we were able to collect the necessary data for the project. Upon modeling of the aggregated data, however, an anomaly in the latest year's data was identified, which affected model performance scores until the incomplete year was dropped from the test data. It was found that a linear model with slightly positive slope predicts annual temperatures fairly well, and that northern cities in NZ tend to have more stable climates as manifested in the smoother trend in maximum daily temperatures.
+

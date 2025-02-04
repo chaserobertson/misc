@@ -1,0 +1,142 @@
+---
+title: "Lab 4"
+author: "Chase Robertson"
+date: "16/08/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Parallelisation and Optimisation
+
+## Dataset
+
+The dataset used here is a small subset of NYC taxi pickup data from 2010, which includes information on pickup and dropoff times, locations, and payment information. A dataset listing Foursquare locations is also used, including location and venue type information, which is used to estimate the community landscape of the taxi pickups.
+
+## Analysis
+
+1. Extract the pickup time, longitude, and latitude (fields 2, 6, 7 respectively) from a single day of taxi pickup data into a new file.
+
+```{bash}
+if [ ! -e /course/users/crob873/lab-4 ]; then 
+mkdir /course/users/crob873/lab-4; 
+bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 |\
+awk -F, 'substr($2, 0, 10) == "2010-01-08" {print $2","$6","$7}' >\
+/course/users/crob873/lab-4/pickup-2010-01-08.txt; 
+fi
+```
+
+2. Read the new file into R and add column names.
+
+```{r}
+pickup <- readr::read_csv("/course/users/crob873/lab-4/pickup-2010-01-08.txt", col_names= c("time", "lon", "lat"), show_col_types=FALSE)
+
+str(pickup)
+```
+
+Verify that there is only one date in data.
+
+```{r}
+table(substr(pickup$time, 0, 10))
+```
+
+Indeed, only one date exists.
+
+Now plot locations to illuminate suspicious values.
+
+```{r}
+plot(lon ~ lat, data=pickup)
+```
+
+There are suspicious values very far from the main cluster of points, the cluster likely being centered on the real NYC coordinates.
+
+3. Remove all points outside of NYC lat/lon bounding box.
+
+```{r}
+pickup <- subset(pickup, 40.4 <= lat & lat <= 41.1 & -74.5 <= lon & lon <= -73.5)
+```
+
+Split the dataset into a single piece for each hour of the day.
+
+```{r}
+by_hour <- lapply(0:23, FUN = function(x) subset(pickup, as.integer(substr(time, 12, 13)) == x))
+
+plot(1:24, sapply(by_hour, nrow))
+```
+
+There is a strong positive relationship between the hour of day and the number of trips taken. As one would expect, very few trips occur in the early AM, and many occur in the late evening.
+
+4. Find the nearest Foursquare location of each taxi pickup.
+
+```{r}
+fs <- readr::read_tsv("/course/data/fsquare/dataset_TIST2015_POIs.txt", col_names=c("id", "lat", "lon", "type", "country"), show_col_types=FALSE)
+
+str(fs)
+```
+
+Having verified the import, Foursquare locations should be reduced by the same NYC bounding box. Haversine distances are then computed to select the nearest FS location of each taxi pickup.
+
+```{r}
+source("/course/data/code/hav.R")
+
+# reduce foursquare locations to same NYC range as pickups
+fs_nyc <- subset(fs, 40.4 <= lat & lat <= 41.1 & -74.5 <= lon & lon <= -73.5)
+
+m1 <- data.matrix(subset(by_hour[[9]], select=c("lat", "lon")))
+m2 <- data.matrix(subset(fs_nyc, select=c("lat", "lon")))
+
+# test on small subset of 8am-9am pickups
+system.time(l <- lapply(1:20, function(i) which.min(hav(m2, m1[i,]))))
+```
+
+Now, the location selection is applied to all 8am-9am taxi pickups in parallel.
+  
+```{r}
+library(parallel)
+
+system.time(l <- mclapply(1:nrow(m1), function(i) which.min(hav(m2, m1[i,])), mc.cores=10))
+```
+
+A similar parallelisation is applied using the cluster framework.
+
+```{r}
+system.time({
+    c1 <- makeCluster(10);
+    clusterExport(c1, c('m1', 'm2', 'hav'));
+    l <- clusterApply(c1, 1:nrow(m1), function(i) which.min(hav(m2, m1[i,])));
+    stopCluster(c1)
+})
+```
+
+The cluster method took a while longer than `mclapply`, likely because each node in the cluster manages its own environment, and requires additional overhead to create and destroy that environment. In this relatively simple case, the cluster method is a bit too complex, but in other cases would be worth the complexity to get its safer and more extensible parallelisation.
+
+6. Run the same analysis on pickups between 20:00-21:00.
+
+```{r}
+m3 <- data.matrix(subset(by_hour[[21]], select=c("lat", "lon")))
+
+l2 <- parallel::mclapply(1:nrow(m3), function(i) which.min(hav(m2, m3[i,])), mc.cores=10)
+```
+
+Compare the venue types located in the two analyses.
+
+```{r}
+l1_nearest <- fs_nyc[unlist(l), ]
+t1 <- table(l1_nearest$type)
+head(t1[order(t1, decreasing = TRUE)], 20)
+```
+
+```{r}
+l2_nearest <- fs_nyc[unlist(l2), ]
+t2 <- table(l2_nearest$type)
+head(t2[order(t2, decreasing = TRUE)], 20)
+```
+
+As one might expect, the morning taxi pickups seem to occur more often in more residential areas featuring a higher proportion of residences, churches, etc. Offices are the most common evening pickup area, to a much higher degree than morning pickups. Bars and restaurants also feature more highly on the evening table. 
+
+# Summary
+
+This project was an interesting investigation into parallelisation and optimisation of data analysis with the linux shell and R. When working with datasets as large as those of NYC taxi rides and Foursquare locations, and especially when making a quadratic comparison between observations, the necessity of well-optimised code and well-executed parallelisation on powerful machines becomes quite obvious. Libraries like `parallel` provide the necessary abstraction to fit computationally intensive tasks like this.
+

@@ -1,0 +1,161 @@
+---
+title: "Stats 769 Lab 3"
+author: "Chase Robertson"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Set
+
+The data utilised in this report is of individual NYC taxi rides, and is stored in compressed (likely monthly) chunks on the remote VM used for processing and analysis. The 2010-01 file chosen for analysis includes 18 fields, with 3 selected for import into R: payment type, tip amount, and total payment amount.
+
+## Import
+
+1. How long does it take to decompress one file of 2010 data, and how many lines are in the file?
+```{bash eval=F}
+$ time bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | wc -l
+
+14863780
+
+real    1m16.586s
+user    1m14.860s
+sys     0m5.601s
+```
+
+Assuming sequential processing, and that each of the data files would take roughly the same amount of time to decompress:
+
+- decompressing all 2010 data would take 15-20 minutes
+- decompressing all available CSV files (7 years' worth) would take about 2 hours
+
+2. Time the parallel decompression of all 2010 files.
+
+```{bash eval=F}
+$ time ls /course/data/nyctaxi/csv/yellow_tripdata_2010-??.csv.bz2 | parallel -j12 "bzip2 -dc {} | wc -l"
+
+11145411
+12528179
+12884364
+13819324
+13912312
+14199609
+14656521
+14825130
+14863780
+15144992
+15540211
+15481353
+
+real    1m52.811s
+user    19m25.231s
+sys     1m38.604s
+```
+
+Parallel decompression took the same amount of time per-file, but a total computation time of 20 minutes, which is within my predicted range. Parallel processing would be crucial if decompression of all 7 years' data files were desired.
+
+3. Extract specific fields from compressed file
+
+```{bash eval=F}
+$ bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | head -n1
+
+vendor_id,pickup_datetime,dropoff_datetime,passenger_count,trip_distance,pickup_longitude,pickup_latitude,rate_code,store_and_fwd_flag,dropoff_longitude,dropoff_latitude,payment_type,fare_amount,surcharge,mta_tax,tip_amount,tolls_amount,total_amount
+
+$ bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | cut -d ',' -f12,16,18 > /course/users/crob873/lab-3/tips-2010-01.csv
+
+$ wc -c /course/users/crob873/lab-3/tips-2010-01.csv
+338001551 /course/users/crob873/lab-3/tips-2010-01.csv
+```
+
+Given the order of fields in the file header, the desired fields can be extracted by number with `cut`. With the size of the reduced file being 330 MB, I estimate the memory required to load into R to be somewhere around 500 MB, so a 2 GB machine should be able to handle it fine, assuming the OS and other applications don't use up too much of the remaining memory.
+
+4. Read reduced file into R and check size in memory.
+
+```{r}
+tt <- readr::read_csv("/course/users/crob873/lab-3/tips-2010-01.csv", show_col_types = FALSE)
+object.size(tt)
+str(tt)
+```
+
+The actual object size is significantly lower than I expected, just a bit more than is required to store on disc. I thought the character vector would include a few more characters, and thus require more than one 64-bit word to store each item. Now that I see the actual memory size, it makes sense that it would only be slightly more than storage size, as it is stored as plaintext, and in memory would require the same, plus a bit of metadata.
+
+## Clean
+
+5. Ensure payment_method has the correct four possible values: cash, credit-card, disputed and no-charge.
+
+```{r}
+table(tt$payment_type)
+tt$payment_type[tt$payment_type == "CAS" | tt$payment_type == "Cas"] = "cash"
+tt$payment_type[tt$payment_type == "CRE" | tt$payment_type == "Cre"] = "credit-card"
+tt$payment_type[tt$payment_type == "Dis"] = "disputed"
+tt$payment_type[tt$payment_type == "No"] = "no-charge"
+table(tt$payment_type)
+```
+
+## Explore
+
+6. Sanity check of variable distributions and relationships.
+
+```{r}
+summary(tt)
+hist(tt$tip_amount)
+hist(tt$total_amount)
+
+sum(tt$tip_amount < 0.009) / nrow(tt)
+sum(tt$total_amount > 200)
+
+max_totals <- head(tt[rev(order(tt$total_amount)),], 1000)
+plot(tip_amount ~ total_amount, data=max_totals)
+```
+
+The proportion of trips which did not include a tip is a bit surprising; I would expect fewer than 68% of trips to not include a tip. Other than that, the distributions are not outside of expectations. Most trips are for smaller amounts, and more expensive trips tend toward higher tip amounts.
+
+7. Check relationship between tip amount and payment type.
+
+```{r}
+tipped <- tt[tt$tip_amount > 0.009, "payment_type"]
+table(tipped)
+
+not_tipped <- tt[tt$tip_amount <= 0.009, "payment_type"]
+table(not_tipped)
+```
+
+Cash payments are heavily overrepresented in the no-tip category, as well as disputed and no-charge trips. I would expect that disputed and no-charge trips did not involve tips, but cash requires some explanation. I would guess that trips paid in cash tend to be whole-number payments using paper bills, with the tip being a "keep-the-change" deal which may not be distinguished from the total payment. For example, a trip costing \$32.38 may be paid with two \$20 bills, with no change being returned to the rider. The credit card payment flow would more easily distinguish between ride charge and tip, so the credit card no-tip category is likely more representative of reality.
+
+## Model
+
+8. On credit card transactions only, plot the relationship between base ride charges and tip amounts.
+
+```{r}
+credit <- subset(tt, payment_type == "credit-card")
+credit$pre_tip <- credit$total_amount - credit$tip_amount
+head(credit)
+```
+
+```{r}
+test_ind <- sample(nrow(credit), nrow(credit)/10)
+train <- credit[-test_ind,]
+test <- credit[test_ind,]
+
+fit <- lm(tip_amount ~ pre_tip, data=train)
+plot(tip_amount ~ pre_tip, data=test, pch='.')
+abline(coef(fit), col=2)
+```
+
+The model basically predicts a 15% tip, which I'd consider a fair prediction, though there is very wide variance in tipping. There are several distinct linear patterns in the tip amounts: horizontal lines at each whole-number amount (e.g. \$1, \$2, etc), sloped lines at what are likely whole percentages (e.g. tip is 15% or 20% of pre-tip amount), and a few interesting vertical lines at around \$50, which I would guess reflect some collection of flat-rate trips (e.g. trips from the airport to downtown always cost \$50). 
+
+```{r}
+# proportion of tips which are suspiciously close to a whole-number percentage of pre-tip amount
+sum((100 * test$tip_amount / test$pre_tip) - as.integer(100 * test$tip_amount / test$pre_tip) < 0.009) / nrow(test)
+# proportion of tips which are exact whole numbers
+sum(test$tip_amount == as.integer(test$tip_amount)) / nrow(test)
+# proportion of pre-tip amounts which are exact whole numbers
+sum(test$pre_tip == as.integer(test$pre_tip)) / nrow(test)
+```
+
+Over 20% of trips had a tip which was equal to some integer percentage of it's pre-tip amount (within a .9 cent tolerance to account for floating-point math). More than half of tips were whole-number amounts, though that figure includes no-tips as well.
+
+# Summary
+
+This project provided an interesting peek into the tools and compromises necessary to process large datasets in reasonable timeframes. After estimating the time needed to decompress the source data, a parallelised decompression and command-line field selection process was conducted to minimise human time and computer memory necessary to conduct data analysis and modeling. The analysis found that payment types did not have consistent values, so that issue was fixed before moving forward. A relationship between payment type and tip amount was found, with the working hypothesis being that cash payments are less likely to have their tips reported accurately. Tips paid by credit card were modeled against base trip charges, and it was found that tip amounts, tip proportions, and base trip charges to a smaller extent, all tend toward whole numbers. A rough average of 15% tip was predicted by a linear model, which fits well with tipping expectations in the US service industry in general.

@@ -1,0 +1,177 @@
+---
+title: "STATS 769 Lab 01"
+author: "Chase Robertson"
+date: '2022-07-27'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# The Dataset
+
+For this short project we'll use a Vehicle Imports subset of the [Overseas merchandise trade dataset](https://www.stats.govt.nz/large-datasets/csv-files-for-download/overseas-merchandise-trade-datasets) as provided by Stats NZ. This can give us insight into Aotearoa New Zealand's vehicle trade over the years, and includes the following variables: 
+
+- Month
+- Harmonised System Code
+- Harmonised System Description
+- Unit Qty
+- Country
+- Imports vfd ($NZD value for duty)
+- Imports cif ($NZD cost, insurance, and freight)
+- Imports Qty
+- Status
+
+# Tasks
+
+## Unix
+
+1. Create lab01 directory, and navigate to that directory
+
+```{bash eval=FALSE}
+mkdir lab01
+cd lab01
+```
+
+2. Show info about all data files inc. size in bytes
+
+```{bash eval=FALSE}
+ls -l vehicles-*.csv
+```
+
+3. Number of lines in vehicles-2020.csv
+
+```{bash eval=FALSE}
+wc -l vehicles-2020.csv
+```
+
+4. Extract records with specific HSC code to a new file and show number of lines
+
+```{bash eval=FALSE}
+grep 8703231915 vehicles-*.csv > car-imports.data
+wc -l car-imports.data 
+```
+
+5. Get total count for all HS codes and print greatest 5
+
+```{bash eval=FALSE}
+cut -d',' -f2 vehicles-*.csv | sort | uniq -c | sort | tail -5
+```
+
+6. Create new csv file with vehicles matching the listed HS codes
+
+```{bash eval=FALSE}
+head -1 vehicles-2000.csv > new-car-imports.csv
+RAW="8703218006, 8703228003, 8703238003, 8703248003, 8703211915, 8703221915, 8703231915, 8703241915"
+HSC=$(sed 's/, /|/g' <<< $RAW)
+egrep -h $HSC vehicles-*.csv >> new-car-imports.csv
+```
+
+## Import
+
+7. Read the previously created file into R
+
+```{r}
+cars <- read.csv("new-car-imports.csv")
+str(cars)
+```
+
+## Clean
+
+8. Improve colnames, convert numeric columns, and create Date column
+
+```{r}
+names(cars) <- c("Month", "HSC", "HSDescription", "Unit", "Country",
+                 "VFD", "CIF", "Quantity", "Status")
+num_cols = c("VFD", "CIF", "Quantity")
+cars[num_cols] <- lapply(cars[num_cols],
+                        function(x) {as.numeric(gsub(",", "", x))})
+cars$Date <- as.Date(paste0(cars$Month, "01"), format="%Y%m%d")
+str(cars)
+```
+
+## Explore
+
+9. Create barplot of total VFD per country
+```{r}
+tab <- tapply(cars$VFD, cars$Country, sum)
+par(mar=c(2,12,1,1))
+barplot(tab[order(tab)], horiz=T, las=1)
+```
+
+The above plot is too crowded, and heavy-tailed, so we plot again on a log scale with the number of countries shown reduced to 10.
+
+```{r}
+tab <- tapply(cars$VFD, cars$Country, sum)
+par(mar=c(2,12,1,1))
+barplot(tail(tab[order(tab)], 10), horiz=T, las=1, log="x")
+```
+
+10. Compute and plot monthly import value per HS code over time
+
+```{r}
+hsc <- xtabs(VFD ~ Month + HSC, data=cars) / 1e6
+matplot(hsc, type='l', lty=1, xaxt="n", xlab="Month",
+        ylab="Value for Duty in millions NZD",
+        main="Total Monthly Import Value by HS Code")
+axis(1, at=seq(0, 250, by=60), labels=seq(2000, 2020, by=5))
+```
+
+Something major happened in 2017 - multiple HS codes' VFD values either appear out of nowhere, or suddenly drop to 0. The trendlines seem to continue normally enough, but the colors have changed! This suggests that the HS code specification may have changed in 2017 - the same engines are represented by different codes within each date range.
+
+```{r}
+descs <- unique(cars$HSDescription)
+descs[1]
+descs[5]
+```
+
+By the looks of it, some re-coding was done to explicitly separate hybrid vehicles - from "Vehicles; spark-ignition" to "Vehicles; with only spark-ignition". I would propose creating a new copy of the dataset with the old HS codes converted to their new counterpart, such that each engine category has one continuous timeline of data.
+
+## Model
+
+11. Narrowing the scope to German imports, a mean model and linear model are fit to the first 90% of Date and used to predict "future" VFD.
+
+```{r}
+# narrow scope to Germany, scale vfd to millions NZD, sort by Month
+germany <- aggregate(VFD ~ Date, data=subset(cars, Country == 'Germany'), sum)
+germany$VFD <- germany$VFD / 1e6
+germany <- germany[order(germany$Date),]
+
+# reserve final 10% for testing
+n <- nrow(germany)
+pivot <- floor(n * 0.9)
+train <- germany[1:pivot,]
+test <- germany[-(1:pivot),]
+
+mean_model <- mean(train$VFD)
+mean_pred <- rep(mean_model, nrow(test))
+
+linear_model <- lm(VFD ~ Date, data=train)
+linear_pred <- predict(linear_model, test)
+
+rmse <- function(actual, predicted) {
+    sqrt(mean((actual - predicted) ^ 2))
+}
+
+cat("RMSE for mean:", fill=T)
+rmse(test$VFD, mean_pred)
+cat("RMSE for linear model:", fill=T)
+rmse(test$VFD, linear_pred)
+```
+
+Plot of VFD over time, with each model plotted, and an indication of where train/test split occurs.
+
+```{r}
+plot(VFD ~ Date, data=germany, type='l', 
+     xlab='Year', ylab='Value for Duty (millions NZD))')
+abline(h=mean_model, col='blue')
+abline(linear_model, col='red')
+abline(v=test$Date[1], lty=2)
+```
+
+The linear model is not very sensible, as it performs worse than simple mean prediction, and is not nearly flexible enough to capture seasonal or year-over-year trends. The increase in imports between 2015 and 2019 draws the line up to positive slope, but the trend in the test set is not all that positive.
+
+# Summary
+
+In this project, we took a look at Aotearoa New Zealand's vehicle imports over time. It provided a good opportunity to practice some Linux shell commands, data cleaning, data analysis and visualisation, and simple modeling. The data were discovered to contain interesting quirks like re-coded vehicle categories. A simple linear model was discovered not to model imports from Germany very well, which is not surprising. Further research directions might include confirming and clarifying the vehicle re-coding hypothesis with information from Stats NZ, and fitting more flexible models or making better use of the other variables included in the dataset.
