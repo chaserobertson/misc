@@ -1,0 +1,90 @@
+---
+title: "Lab 8: Mushrooms with XGBoost"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The following code loads a dataset on mushroom properties (originally from: http://archive.ics.uci.edu/ml/machine-learning-databases/mushroom/agaricus-lepiota.names) and fits gradient boosted trees
+
+```{r}
+library(xgboost)
+data(agaricus.train, package='xgboost')
+data(agaricus.test, package='xgboost')
+
+bst <- xgboost(data = agaricus.train$data, label = agaricus.train$label,
+               max_depth = 2, eta = 1, nthread = 2, nrounds = 2, 
+               objective = "binary:logistic")
+pred <- predict(bst, agaricus.test$data)
+```
+
+1. What do `max_depth=2`, `eta=1` and `nrounds=2` do?
+
+- `max_depth=2` sets the maximum depth of each tree in each iteration of the boosting algorithm to 2
+- `eta=1` scales the contribution of each tree by 1, effectively maximising the "learning rate" of the boosting algorithm
+- `nrounds=2` limits the number of boosting iterations to 2
+
+2. Use `xgb.plot.tree` to draw the tree (it appears in your browser; you need to export/save it from there)
+
+```{r}
+xgb.plot.tree(model = bst)
+```
+
+3. Fit a model with the same options for `max_depth=2` and `eta=1` but with `nrounds` chosen to minimise cross-validation loss.  Use `xgb.plot.tree` to plot it. Comment on the relative accuracy and complexity of the two models
+
+```{r}
+xgb.cv(data = agaricus.train$data, label = agaricus.train$label, 
+       max_depth = 2, eta = 1, nthread = 2, nrounds = 20, nfold = 10,
+       objective = "binary:logistic", metrics = 'error')
+
+bst2 <- xgboost(data = agaricus.train$data, label = agaricus.train$label, 
+                max_depth = 2, eta = 1, nthread = 2, nrounds = 3, 
+                objective = "binary:logistic")
+xgb.plot.tree(model = bst2)
+```
+
+- By adding one more round to the model training, we achieved nearly 50% reduction in logloss, but added about 50% more complexity to the model in the form of a third tree. The added complexity reduced cross-validation test error by 70%, so it seems worth the trade-off.
+
+4. Now try lowering the learning rate `eta` to reduce cross-validation loss. (think about a strategy for choosing values of `eta` to try, but don't try more than five or so different ones)
+
+```{r}
+for (e in rev(c(0.1, 0.3, 0.5, 0.8))) {
+  cat('attempting eta', e, fill=T)
+  xgb.cv(data = agaricus.train$data, label = agaricus.train$label, max_depth = 2, eta = e, nthread = 2, nrounds = 3 / e, nfold = 10, objective = "binary:logistic", metrics = 'error')
+}
+```
+
+5. Data wrangling: the file mushroom.test contains descriptions of three new mushrooms. How does the first model classify their edibility?   *To convert the new data into the correct matrix form, you will need to construct column names as they are in the main data set. The names from the main data can be retrieved using `dimnames(agaricus.train$data)[[2]]`*.
+
+```{r}
+library(tidyverse)
+newmush <- read.csv('mushroom.test', strip.white=T)
+nm <- data.frame(t(newmush))
+names(nm) <- nm[1,]
+nm <- nm[-1,]
+
+for (n in names(nm)) {
+  nm <- nm %>%
+    pivot_wider(names_from=all_of(n), names_glue="{.value}={.name}", 
+                values_from=all_of(n), values_fn=function(x){as.integer(!is.na(x))})
+}
+
+emptynames <- setdiff(dimnames(agaricus.train$data)[[2]], names(nm))
+nm[emptynames] = 0
+
+nm <- nm %>% 
+  replace(is.na(.), 0)
+
+nm <- nm[, dimnames(agaricus.test$data)[[2]]]
+
+p <- model.matrix(~ ., data=nm)[,-1]
+dimnames(p)[[2]] <- gsub("`", "", dimnames(p)[[2]])
+
+predict(bst, p)
+```
+
+6. The mushrooms are A: *Amanita phalloides*, B: *Amanita virosa*, C: *Volvariella volvacea*. Look up their common names. Comment on the usefulness of the model.
+
+- The model predicted that all three were inedible, assuming that any value below 0.5 should be interpreted as an inedible mushroom. A and B are actually inedible, while C is edible, so our model is not 100% accurate. It is best to air on the side of caution, however, so the model is still useful for helping prevent death-by-mushroom.

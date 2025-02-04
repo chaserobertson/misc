@@ -1,0 +1,58 @@
+---
+title: "Lab 8: Mushrooms with XGBoost"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The following code loads a dataset on mushroom properties (originally from: http://archive.ics.uci.edu/ml/machine-learning-databases/mushroom/agaricus-lepiota.names) and fits gradient boosted trees
+
+```{r}
+library(xgboost)
+data(agaricus.train, package='xgboost')
+data(agaricus.test, package='xgboost')
+
+bst <- xgboost(data = agaricus.train$data, label = agaricus.train$label,
+               max_depth = 2, eta = 1, nthread = 2, nrounds = 2, 
+               objective = "binary:logistic")
+pred <- predict(bst, agaricus.test$data)
+```
+
+1. What do `max_depth=2`, `eta=1` and `nrounds=2` do?
+
+- `max_depth=2` sets the maximum depth of each tree in each iteration of the boosting algorithm to 2
+- `eta=1` scales the contribution of each tree by 1, effectively maximising the "learning rate" of the boosting algorithm
+- `nrounds=2` limits the number of boosting iterations to 2
+
+2. Use `xgb.plot.tree` to draw the tree (it appears in your browser; you need to export/save it from there)
+
+```{r}
+xgb.plot.tree(model = bst)
+```
+
+3. Fit a model with the same options for `max_depth=2` and `eta=1` but with `nrounds` chosen to minimise cross-validation loss.  Use `xgb.plot.tree` to plot it. Comment on the relative accuracy and complexity of the two models
+
+```{r}
+bst2 <- xgb.cv(data = agaricus.train$data, 
+               label = agaricus.train$label,
+               max_depth = 2, eta = 1, nthread = 2,
+               objective = "binary:logistic",
+               metrics = 'error',
+               nfold = 10,
+               nrounds = 50,
+               early_stopping_rounds = 10)
+```
+```{r}
+bst2$test.error.mean
+#errs = cbind(bst2$iter, bst2[c('test_error_mean', 'test_error_std')])
+#errs
+#xgb.plot.tree(model = bst2)
+```
+
+4. Now try lowering the learning rate `eta` to reduce cross-validation loss. (think about a strategy for choosing values of `eta` to try, but don't try more than five or so different ones)
+
+5. Data wrangling: the file mushroom.test contains descriptions of three new mushrooms. How does the first model classify their edibility?   *To convert the new data into the correct matrix form, you will need to construct column names as they are in the main data set. The names from the main data can be retrieved using `dimnames(agaricus.train$data)[[2]]`*.
+
+6. The mushrooms are A: *Amanita phalloides*, B: *Amanita virosa*, C: *Volvariella volvacea*. Look up their common names. Comment on the usefulness of the model.

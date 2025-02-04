@@ -1,0 +1,19 @@
+<OGRVRTDataSource>
+  <OGRVRTLayer name="statistical-area-2-2019-generalised">
+    <SrcDataSource relativeToVRT="1">statistical-area-2-2019-generalised.csv</SrcDataSource>
+    <FeatureCount>2255</FeatureCount>
+    <GeometryField field="WKT" reportSrcColumn="FALSE">
+      <GeometryType>wkbPolygon</GeometryType>
+      <SRS>EPSG:2193</SRS>
+      <ExtentXMin>1067061.19985</ExtentXMin>
+      <ExtentYMin>4701317.18175</ExtentYMin>
+      <ExtentXMax>2523319.44865</ExtentXMax>
+      <ExtentYMax>6242140.2959</ExtentYMax>
+    </GeometryField>
+    <Field name="SA22019_V1_00" src="SA22019_V1_00" type="String" width="10" />
+    <Field name="SA22019_V1_00_NAME" src="SA22019_V1_00_NAME" type="String" width="255" />
+    <Field name="LAND_AREA_SQ_KM" src="LAND_AREA_SQ_KM" type="Real" />
+    <Field name="AREA_SQ_KM" src="AREA_SQ_KM" type="Real" />
+    <Field name="Shape_Length" src="Shape_Length" type="Real" />
+  </OGRVRTLayer>
+</OGRVRTDataSource>

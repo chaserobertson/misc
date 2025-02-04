@@ -1,0 +1,22 @@
+attribute,				 A,	B,	C 
+cap-shape,			convex, flat, conical
+cap-surface,			smooth, smooth, smooth
+cap-color,			green, white, buff
+bruises?,			       no,no,no
+odor,				none,none,none       
+gill-attachment,		free, free, free
+gill-spacing,			crowded, crowded, crowded
+gill-size,				broad, narrow, narrow
+gill-color,			white,white, white
+stalk-shape,			enlarging, enlarging, enlarging
+stalk-root,			cup, cup, cup
+stalk-surface-above-ring, smooth, smooth, smooth
+stalk-color-above-ring, 	  white,white,white
+stalk-color-below-ring,  white,white,white
+veil-type,			universal, partial, universal
+veil-color,			white, white,white
+ring-number,			one,one,one
+ring-type,			pendant,pendant, pendant
+spore-print-color,		white, white, orange
+population,			solitary, solitary, clustered
+habitat,				woods, woods, woods
